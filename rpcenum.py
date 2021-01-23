@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 import os
-import pyfiglet,sys,signal
+import pyfiglet,sys,signal,argparse
 from prettytable import PrettyTable
 from multiprocessing import Pool
 from pwn import *
 
 
-t1 = PrettyTable(['USERNAME',"RID" ,'DESCRIPTION'])
+t1 = PrettyTable(['RID',"USERNAME" ,'NAME',"DESCRIPTION"])
 t2 = PrettyTable(['GROUPNAME',"RID", 'DESCRIPTION'])
-
 
 def handler(key,frame):
 	print(color['red']+"GoodBye!"+color['off'])
@@ -38,15 +37,14 @@ color = {
 }
 
 
-def getRIDU(IP):
-	rusers = os.popen('rpcclient {} -U "" -N -c "enumdomusers" | cut -d "[" -f 3 | cut -d "]" -f 1'.format(IP)).read().split('\n')
-	r=[]
 
-	for x in range(len(rusers)):
-		if (rusers[x] != ""):
-			r.append(IP+":"+rusers[x])
+def banner():
+	print(color['red'])
+	print(pyfiglet.figlet_format("RPCENUM"))
+	print(color['off'])
+	print(color['darkblack'] +" "*20+ "By Intrusionz3r0 (v2.0)"+ color['off'])
 
-	return r
+
 
 def getRIDG(IP):
 	rgroups = os.popen('rpcclient {} -U "" -N -c "enumdomgroups" | cut -d "[" -f3 | cut -d "]" -f1'.format(IP)).read().split('\n')
@@ -54,28 +52,14 @@ def getRIDG(IP):
 
 	for x in range(len(rgroups)):
 		if(rgroups[x] != ""):
-			r.append(IP+":"+rgroups[x])
+			r.append(IP+"[$]"+rgroups[x])
 
 	return r
 
 
-def getUser(params):
-	ip = params.split(":")[0]
-	rid = params.split(":")[1]
-
-	user = os.popen('rpcclient {} -U "" -N -c "queryuser {}" | grep "User Name" | cut -d ":" -f2 | xargs'.format(ip,rid)).read()
-	user = user.strip()
-
-	desc = os.popen('rpcclient {} -U "" -N -c "queryuser {}" | grep "Description" | cut -d ":" -f2 | xargs'.format(ip,rid)).read()
-	desc = desc.strip()
-
-	user = user+":"+desc+":"+rid
-	return user
-
-
-def getGroups(params):
-	ip = params.split(":")[0]
-	rid = params.split(":")[1]
+def getGroup(params):
+	ip = params.split("[$]")[0]
+	rid = params.split("[$]")[1]
 
 	group = os.popen('rpcclient {} -U "" -N -c "querygroup {}" | grep "Group Name" | cut -d ":" -f2 | xargs'.format(ip,rid)).read()
 	group = group.strip()
@@ -83,70 +67,53 @@ def getGroups(params):
 	desc = os.popen('rpcclient {} -U "" -N -c "querygroup {}" | grep "Description" | cut -d ":" -f2 | xargs'.format(ip,rid)).read()
 	desc= desc.strip()
 
-	gg = group+":"+desc+":"+rid
+	gg = group+"[$]"+desc+"[$]"+rid
 	return gg
 
 
-def writeUserFile(user):
-	file = open("users.txt","a")
-	file.write(user+"\n")
-	file.close()
-
-def nullSession(IP):
-
+def nullsession(IP):
 	p1 = log.progress("Users")
-
-	print(color['darkcyan'])
 	p1.status("Collecting information from users.")
-	print(color['off'])
 
-	pool = Pool(processes=50)
-	data = getRIDU(IP)
-	u=[]
-	for user in pool.imap_unordered(getUser,[line for line in data]):
-		u.append(user)
-		user = user.split(":")[0]
-		writeUserFile(user)
+	request = os.popen('rpcclient {} -U "" -N -c "querydispinfo2" > data.tmp'.format(IP)).read().split('\n')
 
-	printTableU(u)
+	users = os.popen("cat data.tmp | awk '{print $8}'").read().split("\n")
+	rids = os.popen("cat data.tmp | awk '{print $4}'").read().split("\n")
+	names= os.popen("cat data.tmp | awk '{print $1}' FS='Desc:' | awk '{print $2}' FS='Name: ' | sed 's/^[ \t]*//;s/[ \t]*$//'").read().split("\n")
+	desc = os.popen("cat data.tmp | cut -d':' -f7 | sed 's/^[ \t]*//;s/[ \t]*$//'").read().split("\n")
 
-	print(color['darkcyan'])
+	p1.status("Export users file.")
+	time.sleep(1)
+	writeUsersFile(users)
+	printTableUsers(rids,users,names,desc)
+
 	p1.success("finalized.")
-	print(color['off'])
-
+	pool = Pool(processes=50)
 	p2 = log.progress("Groups")
-	print(color['darkcyan'])
 	p2.status("Collecting information from groups.")
-	print(color['off'])
-	data2= getRIDG(IP)
+	groupsinfo = getRIDG(IP)
 	g=[]
-
-	for group in pool.imap_unordered(getGroups,[line for line in data2]):
+	for group in pool.imap_unordered(getGroup,[line for line in groupsinfo]):
 		g.append(group)
 
 	printTableG(g)
-
-	print(color['darkcyan'])
 	p2.success("finalized.")
-	print(color['off'])
 
-
-def printTableU(data):
-	for x in data:
-		user= x.split(":")[0]
-		desc=x.split(":")[1]
-		rid=x.split(":")[2]
-		t1.add_row([user,rid,desc])
-
+def printTableUsers(rids,users,names,desc):
+	for x in range(len(rids)):
+		if(rids[x] != ""):
+			t1.add_row([rids[x],users[x],names[x],desc[x]])
 	print(color['darkwhite'])
 	print(t1)
 	print(color['off'])
+	os.remove("data.tmp")
+
 
 def printTableG(data):
 	for x in data:
-		group= x.split(":")[0]
-		desc= x.split(":")[1]
-		rid=x.split(":")[2]
+		group= x.split("[$]")[0]
+		desc= x.split("[$]")[1]
+		rid=x.split("[$]")[2]
 		t2.add_row([group,rid,desc])
 
 	print(color['darkwhite'])
@@ -154,14 +121,28 @@ def printTableG(data):
 	print(color['off'])
 
 
-def banner():
-	print(color['red'])
-	print(pyfiglet.figlet_format("RPCENUM"))
-	print(color['off'])
-	print(color['darkblack'] +" "*20+ "By Intrusionz3r0 (v1.0)"+ color['off'])
+def writeUsersFile(users):
+	file = open("users.txt","a")
+	for x in users:
+		if(x != ""):
+			file.write(x+"\n")
+	file.close()
+
+
 
 if __name__ == "__main__":
 	banner()
-	IP = sys.argv[1]
-	print("\n")
-	nullSession(IP)
+	parser = argparse.ArgumentParser()
+	parser.add_argument("-I", "--ipaddress" , help="specify destination IP address.")
+	parser.add_argument("-U", "--username" , help="set username.")
+	parser.add_argument("-P", "--password" , help="set password.")
+	args = parser.parse_args()
+
+	if(args.ipaddress and args.username or args.password):
+		print("RPC con credenciales")
+		sys.exit(0)
+	elif(args.ipaddress):
+		print("\n")
+		nullsession(args.ipaddress)
+		sys.exit(0)
+
