@@ -188,10 +188,7 @@ if __name__ == "__main__":
 	banner()
 
 	print(color['darkwhite'])
-	parser = argparse.ArgumentParser()
-	parser = argparse.ArgumentParser(add_help=False)
-	parser.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS, help='how to use.')
-	parser = argparse.ArgumentParser(prog='python3', usage='%(prog)s rpcenum.py [options]')
+	parser = argparse.ArgumentParser(prog='python3', usage='%(prog)s rpcenum.py [arguments]')
 	parser.add_argument("-I", "--ipaddress" , help="specify destination IP address.")
 	parser.add_argument("-U", "--username" , help="set username.")
 	parser.add_argument("-P", "--password" , help="set password.")
